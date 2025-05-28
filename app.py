@@ -1,14 +1,19 @@
 import streamlit as st
 import pandas as pd
 import sqlite3
+import os
 
-st.title("📤 Upload Company Excel File")
+# --- Page setup ---
+st.set_page_config(page_title="Company Uploader", layout="wide")
+st.title("📤 Upload Company Excel Files")
+st.markdown("Upload multiple Excel files. All data is saved and searchable across sessions.")
 
-# Connect to SQLite DB
-conn = sqlite3.connect("company_data.db", check_same_thread=False)
+# --- Database setup ---
+DB_PATH = "company_data.db"
+conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 cursor = conn.cursor()
 
-# Create table if it doesn't exist
+# Create table only once
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS companies (
     CIN TEXT PRIMARY KEY,
@@ -19,25 +24,29 @@ CREATE TABLE IF NOT EXISTS companies (
 """)
 conn.commit()
 
-# Upload Excel file
-uploaded_file = st.file_uploader("Upload your Excel file", type=["xlsx"])
+# --- Upload and process Excel file ---
+uploaded_file = st.file_uploader("Upload Excel file", type=["xlsx"])
 
 if uploaded_file is not None:
     df = pd.read_excel(uploaded_file)
 
-    # Standardize and clean headers
     expected_columns = ['CIN', 'Name', 'State', 'Email']
+
+    # Fix headers
     if df.shape[1] >= 4:
-        if df.iloc[0].str.upper().tolist()[:4] == [col.upper() for col in expected_columns]:
-            df = df[1:]  # Drop duplicate header row
-
+        first_row = df.iloc[0].astype(str).str.upper().tolist()
+        if first_row[:4] == [col.upper() for col in expected_columns]:
+            df = df[1:]
+    
     df.columns = expected_columns
-    df = df.reset_index(drop=True)
-
-    # Drop duplicate CINs within the same upload
+    df = df[expected_columns]
     df = df.drop_duplicates(subset="CIN")
+    
+    # Clean and normalize text fields
+    for col in expected_columns:
+        df[col] = df[col].astype(str).str.strip()
 
-    # Insert data — ignore if CIN already exists
+    # Insert data into DB without duplicates
     for _, row in df.iterrows():
         cursor.execute("""
             INSERT OR IGNORE INTO companies (CIN, Name, State, Email)
@@ -45,30 +54,34 @@ if uploaded_file is not None:
         """, (row['CIN'], row['Name'], row['State'], row['Email']))
     conn.commit()
 
-    st.success("✅ File uploaded and data saved! No old data was deleted.")
-
-    # Show newly uploaded data
-    st.subheader("📄 Recently Uploaded Data")
+    st.success(f"✅ {len(df)} companies uploaded and added to database.")
     st.dataframe(df)
 
-# Search functionality
+# --- Search form ---
 st.markdown("---")
-st.subheader("🔍 Search Company Info")
+st.subheader("🔍 Search Company by Name")
 
-search_name = st.text_input("Enter full or partial company name")
+search_name = st.text_input("Enter full or partial company name").strip().lower()
 
 if search_name:
-    cursor.execute("SELECT * FROM companies WHERE Name LIKE ?", ('%' + search_name + '%',))
+    cursor.execute("""
+        SELECT * FROM companies WHERE LOWER(Name) LIKE ?
+    """, ('%' + search_name + '%',))
     results = cursor.fetchall()
 
     if results:
         st.success(f"Found {len(results)} result(s):")
         for cin, name, state, email in results:
             st.markdown(f"""
-            **Company Name**: `{name}`  
-            **CIN**: `{cin}`  
-            **State**: `{state}`  
-            **Email**: `{email}`  
+            🏢 **Company Name**: `{name}`  
+            🆔 **CIN**: `{cin}`  
+            📍 **State**: `{state}`  
+            📧 **Email**: `{email}`  
             ---""")
     else:
         st.warning("No matching company found.")
+
+# --- Optional: Show full DB contents for debugging ---
+with st.expander("📋 View All Stored Companies (Debugging)"):
+    df_all = pd.read_sql_query("SELECT * FROM companies", conn)
+    st.dataframe(df_all)
