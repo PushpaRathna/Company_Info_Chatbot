@@ -40,12 +40,10 @@ if uploaded_file is not None:
     df['State'] = df['State'].astype(str).str.strip()
     df['Email'] = df['Email'].astype(str).str.strip()
 
-    # Drop duplicate CINs
+    # Drop duplicate CINs within the current file
     df = df.drop_duplicates(subset="CIN")
 
-    # OPTIONAL: Clear all existing records before upload
-    cursor.execute("DELETE FROM companies")
-    conn.commit()
+    # DO NOT clear old data — allow cumulative uploads
 
     # Insert or replace data into DB
     for _, row in df.iterrows():
