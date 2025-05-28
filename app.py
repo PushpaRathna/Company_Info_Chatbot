@@ -36,22 +36,26 @@ if uploaded_file is not None:
 
     # Clean and normalize data
     df['CIN'] = df['CIN'].astype(str).str.strip()
-    df['Name'] = df['Name'].astype(str).str.strip().str.lower()  # Normalize to lowercase
+    df['Name'] = df['Name'].astype(str).str.strip().str.lower()
     df['State'] = df['State'].astype(str).str.strip()
     df['Email'] = df['Email'].astype(str).str.strip()
 
     # Drop duplicate CINs
     df = df.drop_duplicates(subset="CIN")
 
-    # Insert data into DB without duplicates
+    # OPTIONAL: Clear all existing records before upload
+    cursor.execute("DELETE FROM companies")
+    conn.commit()
+
+    # Insert or replace data into DB
     for _, row in df.iterrows():
         cursor.execute("""
-            INSERT OR IGNORE INTO companies (CIN, Name, State, Email)
+            INSERT OR REPLACE INTO companies (CIN, Name, State, Email)
             VALUES (?, ?, ?, ?)
         """, (row['CIN'], row['Name'], row['State'], row['Email']))
     conn.commit()
 
-    st.success(f"✅ {len(df)} companies uploaded and added to database.")
+    st.success(f"✅ {len(df)} companies uploaded and saved to database.")
     st.dataframe(df)
 
 # Search functionality
@@ -62,7 +66,7 @@ search_name = st.text_input("Enter full or partial company name").strip().lower(
 
 if search_name:
     cursor.execute("""
-        SELECT * FROM companies WHERE LOWER(Name) LIKE ?
+        SELECT DISTINCT * FROM companies WHERE LOWER(Name) LIKE ?
     """, ('%' + search_name + '%',))
     results = cursor.fetchall()
 
