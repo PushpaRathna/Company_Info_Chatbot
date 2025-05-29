@@ -9,8 +9,10 @@ st.title("📤 Upload Company Excel File")
 # Set path to your SQLite database
 DB_PATH = r"D:\Fraoula Intern\BusinessDetails\company_info_chatbot\company_data.db"
 
-# Ensure the DB directory exists
-os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+# Ensure the DB directory exists (only if directory part exists)
+db_dir = os.path.dirname(DB_PATH)
+if db_dir != "":
+    os.makedirs(db_dir, exist_ok=True)
 
 # Connect to SQLite DB
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
